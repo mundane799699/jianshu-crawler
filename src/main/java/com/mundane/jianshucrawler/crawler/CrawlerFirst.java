@@ -1,5 +1,8 @@
 package com.mundane.jianshucrawler.crawler;
 
+import com.alibaba.fastjson.JSON;
+import com.mundane.jianshucrawler.pojo.Article;
+import com.mundane.jianshucrawler.pojo.Bookmark;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -11,14 +14,46 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 public class CrawlerFirst {
 
     public static void main(String[] args) throws Exception {
-        //1. 打开浏览器,创建HttpClient对象
         CloseableHttpClient httpClient = HttpClients.createDefault();
+        String initUrl = "https://www.jianshu.com/bookmarks";
+        String content = getContent(httpClient, initUrl);
+        if (content == null) {
+            throw new Exception("content = null");
+        }
+        Document doc = Jsoup.parse(content);
+        // 选择script标签, 且属性名为data-name, 属性值为bookmark_page_data的标签
+        // 例如下面这个
+        // <script type='application/json' data-name="bookmark_page_data">{"page":1,"totalPages":119}</script>
+        Element element = doc.select("script[data-name=bookmark_page_data]").first();
+        if (element != null) {
+            // 注意这里要用data()方法而不是text(), 我也不知道为什么
+            // trim()去掉换行符
+            String data = element.data().trim();
+            Bookmark bookmark = JSON.parseObject(data, Bookmark.class);
+            Integer totalPages = bookmark.getTotalPages();
+            System.out.println("totalPages = " + totalPages);
+            List<Article> articleList = new ArrayList<>();
+            for (int index = 1; index <= totalPages; index++) {
+                String perPageUrl = "https://www.jianshu.com/bookmarks?page=" + index;
+                String perPageContent = getContent(httpClient, perPageUrl);
+                parseContent(perPageContent, articleList);
+            }
+            for (Article article : articleList) {
+                System.out.println("article = " + article);
+            }
+        }
 
-        String url = "https://www.jianshu.com/bookmarks";
-        //2. 输入网址,发起get请求创建HttpGet对象
+
+    }
+
+    private static String getContent(CloseableHttpClient httpClient, String url) throws IOException {
         HttpGet httpGet = new HttpGet(url);
 
         String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36";
@@ -33,28 +68,34 @@ public class CrawlerFirst {
         String referer = "https://www.jianshu.com/bookmarks";
         httpGet.addHeader("referer", referer);
 
-        String xPjax = "true";
-        httpGet.addHeader("x-pjax", xPjax);
+//        String xPjax = "true";
+//        httpGet.addHeader("x-pjax", xPjax);
 
-        //3.按回车，发起请求，返回响应，使用HttpClient对象发起请求
         CloseableHttpResponse response = httpClient.execute(httpGet);
 
-        //4. 解析响应，获取数据
-        //判断状态码是否是200
         if (response.getStatusLine().getStatusCode() == 200) {
             HttpEntity httpEntity = response.getEntity();
             String content = EntityUtils.toString(httpEntity, "utf8");
-
-            parseContent(content);
+            return content;
         }
+        return null;
     }
 
-    private static void parseContent(String content) {
+    private static void parseContent(String content, List<Article> articleList) {
         Document doc = Jsoup.parse(content);
 
+        // 选择a标签, class为title标签
+        // 例如这个
+        // <a class="title" target="_blank" href="/p/01a4be0426be">xxx</a>
         Elements elements = doc.select("a.title");
         for (Element element : elements) {
-            System.out.println(element.text());
+            String title = element.text();
+            String baseUrl = "https://www.jianshu.com";
+            String completeLink = baseUrl + element.attr("href");
+            Article article = new Article();
+            article.setTitle(title);
+            article.setLink(completeLink);
+            articleList.add(article);
         }
     }
 }
