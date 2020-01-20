@@ -8,6 +8,7 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.util.EntityUtils;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -24,9 +25,16 @@ import java.util.List;
 public class CrawlerFirst {
 
     public static void main(String[] args) throws Exception {
-        CloseableHttpClient httpClient = HttpClients.createDefault();
+
+        // 创建连接池管理器
+        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+        //设置最大连接数
+        cm.setMaxTotal(100);
+        //设置每个主机的最大连接数
+        cm.setDefaultMaxPerRoute(20);
+
         String initUrl = "https://www.jianshu.com/bookmarks";
-        String content = getContent(httpClient, initUrl);
+        String content = getContent(cm, initUrl);
         if (content == null) {
             throw new Exception("content = null");
         }
@@ -45,7 +53,7 @@ public class CrawlerFirst {
             List<Article> articleList = new ArrayList<>();
             for (int index = 1; index <= totalPages; index++) {
                 String perPageUrl = "https://www.jianshu.com/bookmarks?page=" + index;
-                String perPageContent = getContent(httpClient, perPageUrl);
+                String perPageContent = getContent(cm, perPageUrl);
                 parseContent(perPageContent, articleList);
             }
             outputData(articleList);
@@ -80,7 +88,7 @@ public class CrawlerFirst {
         pw.close();
     }
 
-    private static String getContent(CloseableHttpClient httpClient, String url) throws IOException {
+    private static String getContent(PoolingHttpClientConnectionManager cm, String url) throws IOException {
         HttpGet httpGet = new HttpGet(url);
 
         String userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36";
@@ -98,6 +106,8 @@ public class CrawlerFirst {
 //        String xPjax = "true";
 //        httpGet.addHeader("x-pjax", xPjax);
 
+        //不是每次创建新的HttpClient，而是从连接池中获取HttpClient对象
+        CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(cm).build();
         CloseableHttpResponse response = httpClient.execute(httpGet);
 
         if (response.getStatusLine().getStatusCode() == 200) {
