@@ -14,7 +14,10 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -45,12 +48,36 @@ public class CrawlerFirst {
                 String perPageContent = getContent(httpClient, perPageUrl);
                 parseContent(perPageContent, articleList);
             }
-            for (Article article : articleList) {
-                System.out.println("article = " + article);
-            }
+            outputData(articleList);
+            System.out.println("输出完毕");
         }
 
 
+    }
+
+    private static void outputData(List<Article> articleList) throws FileNotFoundException {
+        File file = new File("我的简书收藏.html");
+        if (file.exists()) {
+            file.delete();
+        }
+        PrintWriter pw = new PrintWriter(file);
+        pw.print("<!DOCTYPE html>\n" +
+                "<html>\n" +
+                "<head>\n" +
+                "<meta charset=\"UTF-8\">\n" +
+                "<title>我的简书收藏</title>\n" +
+                "</head>\n" +
+                "<body>\n");
+        pw.print("<ol>\n");
+        for (Article article : articleList) {
+            String aElement = String.format("<a href=\"%s\">%s</a>", article.getLink(), article.getTitle());
+            pw.print("<li>" + aElement + "</li>\n");
+        }
+        pw.print("</ol>\n");
+        pw.print("</body>\n" +
+                "</html>");
+        pw.flush();
+        pw.close();
     }
 
     private static String getContent(CloseableHttpClient httpClient, String url) throws IOException {
@@ -84,7 +111,7 @@ public class CrawlerFirst {
     private static void parseContent(String content, List<Article> articleList) {
         Document doc = Jsoup.parse(content);
 
-        // 选择a标签, class为title标签
+        // 选择a标签, class为title的标签
         // 例如这个
         // <a class="title" target="_blank" href="/p/01a4be0426be">xxx</a>
         Elements elements = doc.select("a.title");
