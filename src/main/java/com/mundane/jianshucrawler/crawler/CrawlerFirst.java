@@ -3,6 +3,7 @@ package com.mundane.jianshucrawler.crawler;
 import com.alibaba.fastjson.JSON;
 import com.mundane.jianshucrawler.pojo.Article;
 import com.mundane.jianshucrawler.pojo.Bookmark;
+import com.mundane.jianshucrawler.pojo.Page;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -20,7 +21,12 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class CrawlerFirst {
 
@@ -50,17 +56,54 @@ public class CrawlerFirst {
             Bookmark bookmark = JSON.parseObject(data, Bookmark.class);
             Integer totalPages = bookmark.getTotalPages();
             System.out.println("totalPages = " + totalPages);
-            List<Article> articleList = new ArrayList<>();
+            List<Page> pageList = new ArrayList<>();
+            // 开启10个线程
+            ExecutorService exec = Executors.newFixedThreadPool(10);
+            CountDownLatch countDownLatch = new CountDownLatch(totalPages);
             for (int index = 1; index <= totalPages; index++) {
-                String perPageUrl = "https://www.jianshu.com/bookmarks?page=" + index;
-                String perPageContent = getContent(cm, perPageUrl);
-                parseContent(perPageContent, articleList);
+                int tempIndex = index;
+                Runnable task = new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            String perPageUrl = "https://www.jianshu.com/bookmarks?page=" + tempIndex;
+                            String perPageContent = getContent(cm, perPageUrl);
+                            List<Article> articles = parseContent(perPageContent);
+                            Page page = new Page(tempIndex, articles);
+                            pageList.add(page);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        } finally {
+                            countDownLatch.countDown();
+                        }
+                    }
+                };
+                exec.submit(task);
             }
-            outputData(articleList);
+            countDownLatch.await();
+            // 按照index从小到大给page排序
+            List<Article> totalArticleList = sortPage(pageList);
+            outputData(totalArticleList);
             System.out.println("输出完毕");
         }
 
 
+    }
+
+    private static List<Article> sortPage(List<Page> pageList) {
+        Collections.sort(pageList, new Comparator<Page>() {
+            @Override
+            public int compare(Page o1, Page o2) {
+                // 如果o1小于o2, 那就维持这个顺序
+                // 如果o1大于o2, 那就交换位置
+                return o1.getIndex() - o2.getIndex();
+            }
+        });
+        List<Article> totalArticleList = new ArrayList<>();
+        for (Page page : pageList) {
+            totalArticleList.addAll(page.getArticles());
+        }
+        return totalArticleList;
     }
 
     private static void outputData(List<Article> articleList) throws FileNotFoundException {
@@ -118,7 +161,8 @@ public class CrawlerFirst {
         return null;
     }
 
-    private static void parseContent(String content, List<Article> articleList) {
+    private static List<Article> parseContent(String content) {
+        List<Article> articleList = new ArrayList<>();
         Document doc = Jsoup.parse(content);
 
         // 选择a标签, class为title的标签
@@ -134,5 +178,6 @@ public class CrawlerFirst {
             article.setLink(completeLink);
             articleList.add(article);
         }
+        return articleList;
     }
 }
