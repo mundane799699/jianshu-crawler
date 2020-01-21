@@ -37,7 +37,7 @@ public class CrawlerFirst {
         //设置最大连接数
         cm.setMaxTotal(100);
         //设置每个主机的最大连接数
-        cm.setDefaultMaxPerRoute(20);
+        cm.setDefaultMaxPerRoute(40);
 
         String initUrl = "https://www.jianshu.com/bookmarks";
         String content = getContent(cm, initUrl);
@@ -58,7 +58,7 @@ public class CrawlerFirst {
             System.out.println("totalPages = " + totalPages);
             List<Page> pageList = new ArrayList<>();
             // 开启10个线程
-            ExecutorService exec = Executors.newFixedThreadPool(10);
+            ExecutorService exec = Executors.newFixedThreadPool(20);
             CountDownLatch countDownLatch = new CountDownLatch(totalPages);
             for (int index = 1; index <= totalPages; index++) {
                 int tempIndex = index;
@@ -81,6 +81,7 @@ public class CrawlerFirst {
                 exec.submit(task);
             }
             countDownLatch.await();
+            exec.shutdown();
             // 按照index从小到大给page排序
             List<Article> totalArticleList = sortPage(pageList);
             outputData(totalArticleList);
